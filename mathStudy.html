@@ -318,22 +318,47 @@
             if (!content) return "";
 
             // 1. 이미지 처리 (Obsidian Style & Standard Markdown)
-            // 과목에 해당하는 이미지 맵 가져오기
+            // 과목에 해당하는 이미지 맵(파일명 -> 썸네일URL) 가져오기
             const subjectImages = imageMap[subject] || {};
 
-            // A. Obsidian Style: ![[filename]]
-            content = content.replace(/!\[\[(.*?)\]\]/g, (match, filename) => {
-                const cleanName = filename.trim();
-                const driveLink = subjectImages[cleanName]; // 확장자 포함/미포함 모두 매핑되어 있음
-                return driveLink ? `<img src="${driveLink}" alt="${cleanName}">` : match;
+            // 이미지 태그 생성 헬퍼 함수 (스타일 적용)
+            const createImgTag = (url, alt) => {
+                return `<img src="${url}" alt="${alt}" class="max-w-full h-auto mx-auto my-4 rounded shadow-md" title="${alt}">`;
+            };
+
+            // A. Obsidian Style: ![[filename]] 또는 ![[path/filename]]
+            content = content.replace(/!\[\[(.*?)\]\]/g, (match, text) => {
+                // 1. 경로가 섞여 있을 경우 파일명만 추출 (예: "folder/img.png" -> "img.png")
+                let filename = text.split('/').pop().trim();
+                
+                // 2. 썸네일 URL 조회
+                // (fetchFromDrive에서 확장자 있는 것과 없는 것 모두 map에 등록했으므로 바로 조회 가능)
+                let driveLink = subjectImages[filename];
+
+                // 3. 만약 못 찾았는데 확장자가 있다면, 확장자를 떼고 한 번 더 검색 (안전장치)
+                if (!driveLink && filename.includes('.')) {
+                    const noExt = filename.split('.').slice(0, -1).join('.');
+                    driveLink = subjectImages[noExt];
+                }
+
+                return driveLink ? createImgTag(driveLink, filename) : match;
             });
 
             // B. Standard Markdown: ![alt](path/filename)
             content = content.replace(/!\[([^\]]*)\]\((.*?)\)/g, (match, alt, path) => {
-                // 경로에서 파일명만 추출 (예: fig/01_01_01_p_001.png -> 01_01_01_p_001.png)
-                const filename = path.split('/').pop().trim();
-                const driveLink = subjectImages[filename];
-                return driveLink ? `<img src="${driveLink}" alt="${alt}">` : match;
+                // 1. 경로에서 파일명만 추출 (예: "fig/01_01_01_p_001.png" -> "01_01_01_p_001.png")
+                let filename = path.split('/').pop().trim();
+                
+                // 2. 썸네일 URL 조회
+                let driveLink = subjectImages[filename];
+
+                // 3. 안전장치: 확장자 제거 후 재검색
+                if (!driveLink && filename.includes('.')) {
+                    const noExt = filename.split('.').slice(0, -1).join('.');
+                    driveLink = subjectImages[noExt];
+                }
+
+                return driveLink ? createImgTag(driveLink, alt) : match;
             });
 
             // 2. 수식(MathJax) 보호
