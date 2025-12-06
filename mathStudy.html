@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Drive E-Book Viewer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                packages: ['base', 'ams', 'noerrors', 'noundefined']
+            },
+            svg: { fontCache: 'global' },
+            startup: { typeset: false }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Nanum+Gothic&family=Nanum+Gothic+Coding&family=Nanum+Myeongjo&family=Nanum+Pen+Script&display=swap');
+        
+        body { font-family: 'Nanum Myeongjo', serif; }
+        header, button, select, input, .ui-font { font-family: 'Nanum Gothic', sans-serif; }
+        
+        /* Markdown Styles (기존 스타일 유지) */
+        .markdown-body h1, .markdown-body h2, .markdown-body h3 { font-family: 'Black Han Sans', sans-serif; font-weight: 400; }
+        .markdown-body h1 { font-size: 1.8em; margin-bottom: 0.5em; border-bottom: 1px solid #eee; padding-bottom: 0.3em; }
+        .markdown-body h2 { font-size: 1.5em; margin-top: 1em; margin-bottom: 0.5em; }
+        .markdown-body h3 { font-size: 1.25em; margin-top: 1em; margin-bottom: 0.5em; }
+        .markdown-body p { margin-bottom: 1em; line-height: 1.8; }
+        .markdown-body ul { list-style-type: disc; padding-left: 1.5em; margin-bottom: 1em; }
+        .markdown-body ol { list-style-type: decimal; padding-left: 1.5em; margin-bottom: 1em; }
+        .markdown-body blockquote { font-family: 'Nanum Pen Script', cursive; font-size: 1.4em; border-left: 4px solid #ddd; padding-left: 1em; color: #555; margin-bottom: 1em; }
+        .markdown-body pre { background: #f5f5f5; padding: 1em; border-radius: 4px; overflow-x: auto; margin-bottom: 1em; font-family: 'Nanum Gothic Coding', monospace; }
+        .markdown-body code { background: #f5f5f5; padding: 0.2em 0.4em; border-radius: 3px; font-family: 'Nanum Gothic Coding', monospace; font-size: 0.9em; }
+        .markdown-body img { max-width: 100%; height: auto; display: block; margin: 1em 0; }
+        .markdown-body table { width: 100%; border-collapse: collapse; margin-bottom: 1em; }
+        .markdown-body th, .markdown-body td { border: 1px solid #ddd; padding: 0.5em; }
+        .markdown-body th { background-color: #f9f9f9; font-family: 'Nanum Gothic', sans-serif; }
+        .markdown-body strong, .markdown-body b { font-family: 'Nanum Gothic', sans-serif; font-weight: 700; color: #d32f2f; }
+        
+        .k-ol { list-style: none; padding-left: 2em; margin: 0.5em 0; }
+        .k-ol > li { position: relative; margin: 0.25em 0; }
+        .k-ol > li::before { content: attr(data-label); position: absolute; left: -2em; width: 2em; text-align: right; font-family: 'Nanum Gothic', sans-serif; font-weight: 700; }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+    </style>
+</head>
+
+<body class="bg-gray-100 min-h-screen flex flex-col">
+
+    <header class="top-0 z-40 bg-white shadow-md border-b border-gray-200">
+        <div class="container mx-auto px-4 py-3">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-3 gap-3">
+                <h1 class="text-xl font-bold text-gray-800 flex items-center">
+                    <i class="fab fa-google-drive mr-2 text-green-600"></i> Drive E-Book
+                </h1>
+                
+                <div class="flex gap-2">
+                    <button id="authBtn" onclick="handleAuthClick()" class="hidden px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-medium transition shadow-sm">
+                        <i class="fab fa-google mr-2"></i> 구글 로그인
+                    </button>
+                    <button id="signoutBtn" onclick="handleSignoutClick()" class="hidden px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-sm font-medium transition shadow-sm">
+                        로그아웃
+                    </button>
+                    <button id="loadBtn" onclick="fetchFromDrive()" class="hidden px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-medium transition shadow-sm flex items-center">
+                        <i class="fas fa-cloud-download-alt mr-2"></i> 드라이브 불러오기
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <select id="filterSubject" class="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"><option value="">과목 (전체)</option></select>
+                <select id="filterCat1" class="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"><option value="">대단원 (전체)</option></select>
+                <select id="filterCat2" class="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"><option value="">중단원 (전체)</option></select>
+                <select id="filterCat3" class="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"><option value="">소단원 (전체)</option></select>
+            </div>
+
+            <div id="statusMsg" class="text-xs text-gray-500 mt-2 text-right">구글 드라이브에 로그인해주세요.</div>
+        </div>
+    </header>
+
+    <main class="flex-grow container mx-auto px-4 py-6 max-w-4xl overflow-y-auto">
+        <div id="contentArea" class="space-y-6">
+            <div class="text-center text-gray-400 py-20">
+                <i class="fas fa-cloud text-4xl mb-4"></i>
+                <p>표시할 문서가 없습니다.<br>로그인 후 '드라이브 불러오기'를 클릭하세요.</p>
+            </div>
+        </div>
+    </main>
+
+    <div id="solutionModal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onclick="closeModal()"></div>
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+            <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+                <div class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl">
+                    <div class="bg-blue-50 px-4 py-3 sm:px-6 flex justify-between items-center border-b border-blue-100">
+                        <h3 class="text-base font-semibold leading-6 text-blue-900"><i class="fas fa-lightbulb mr-2 text-yellow-500"></i>해설</h3>
+                        <button type="button" onclick="closeModal()" class="text-gray-400 hover:text-gray-500 focus:outline-none"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="px-4 py-5 sm:p-6 max-h-[70vh] overflow-y-auto">
+                        <div id="modalContent" class="markdown-body text-sm text-gray-700"></div>
+                    </div>
+                    <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                        <button type="button" class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto" onclick="closeModal()">닫기</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // [설정] 구글 API 및 폴더 설정 (수정 필요)
+        // ==========================================
+        const CONFIG = {
+            CLIENT_ID: 'YOUR_CLIENT_ID',       // [입력] 클라이언트 ID
+            API_KEY: 'YOUR_API_KEY',           // [입력] API 키
+            ROOT_FOLDER_ID: 'YOUR_FOLDER_ID',  // [입력] 불러올 최상위 폴더 ID
+            DISCOVERY_DOC: 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
+            SCOPES: 'https://www.googleapis.com/auth/drive.readonly'
+        };
+
+        // --- 전역 변수 ---
+        let tokenClient;
+        let gapiInited = false;
+        let gisInited = false;
+        let loadedFiles = [];
+        let CATEGORY_MAP = {
+            "01": "수학 I", "02": "수학 II",
+            "01_01": "지수함수와 로그함수", "01_02": "삼각함수", "02_01": "함수의 극한",
+            "01_01_01": "지수", "01_01_02": "로그", "01_02_01": "삼각함수의 뜻", "02_01_01": "함수의 극한값"
+        };
+
+        // ==========================================
+        // 1. Google Auth & API Logic
+        // ==========================================
+        function gapiLoaded() { gapi.load('client', initializeGapiClient); }
+        async function initializeGapiClient() {
+            await gapi.client.init({ apiKey: CONFIG.API_KEY, discoveryDocs: [CONFIG.DISCOVERY_DOC] });
+            gapiInited = true; maybeEnableButtons();
+        }
+        function gisLoaded() {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CONFIG.CLIENT_ID, scope: CONFIG.SCOPES, callback: ''
+            });
+            gisInited = true; maybeEnableButtons();
+        }
+        function maybeEnableButtons() {
+            if (gapiInited && gisInited) document.getElementById('authBtn').classList.remove('hidden');
+        }
+
+        function handleAuthClick() {
+            tokenClient.callback = async (resp) => {
+                if (resp.error) throw (resp);
+                document.getElementById('authBtn').classList.add('hidden');
+                document.getElementById('signoutBtn').classList.remove('hidden');
+                document.getElementById('loadBtn').classList.remove('hidden');
+                document.getElementById('statusMsg').innerText = "로그인 완료. '드라이브 불러오기'를 클릭하세요.";
+            };
+            if (gapi.client.getToken() === null) tokenClient.requestAccessToken({prompt: 'consent'});
+            else tokenClient.requestAccessToken({prompt: ''});
+        }
+
+        function handleSignoutClick() {
+            const token = gapi.client.getToken();
+            if (token !== null) {
+                google.accounts.oauth2.revoke(token.access_token);
+                gapi.client.setToken('');
+                document.getElementById('authBtn').classList.remove('hidden');
+                document.getElementById('signoutBtn').classList.add('hidden');
+                document.getElementById('loadBtn').classList.add('hidden');
+                document.getElementById('contentArea').innerHTML = "";
+                document.getElementById('statusMsg').innerText = "로그아웃 되었습니다.";
+                loadedFiles = [];
+            }
+        }
+
+        // --- Drive Fetching Logic ---
+        async function fetchFromDrive() {
+            const statusMsg = document.getElementById('statusMsg');
+            statusMsg.textContent = "구글 드라이브 구조 분석 중...";
+            loadedFiles = [];
+
+            try {
+                // 1. 루트 폴더 안의 하위 폴더들(과목) 가져오기
+                // 쿼리: 부모가 ROOT_ID이고, 타입이 폴더이며, 삭제되지 않은 것
+                const folderQuery = `'${CONFIG.ROOT_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+                const foldersResp = await gapi.client.drive.files.list({ q: folderQuery, fields: 'files(id, name)' });
+                const subjectFolders = foldersResp.result.files;
+
+                if (!subjectFolders || subjectFolders.length === 0) {
+                    statusMsg.textContent = "지정된 폴더 안에 하위 폴더(과목)가 없습니다.";
+                    return;
+                }
+
+                // 2. 각 과목 폴더 안의 MD 파일 가져오기
+                let fetchPromises = [];
+
+                for (const folder of subjectFolders) {
+                    const subjectName = folder.name;
+                    // 쿼리: 부모가 과목폴더ID이고, 확장자가 md이며, 삭제되지 않은 것
+                    const fileQuery = `'${folder.id}' in parents and name contains '.md' and trashed = false`;
+                    
+                    // 비동기로 파일 목록 요청 (병렬 처리)
+                    fetchPromises.push(
+                        gapi.client.drive.files.list({ q: fileQuery, fields: 'files(id, name)' })
+                            .then(res => ({ subject: subjectName, files: res.result.files }))
+                    );
+                }
+
+                statusMsg.textContent = "파일 목록 수집 중...";
+                const results = await Promise.all(fetchPromises);
+
+                // 3. 파일 내용(Content) 다운로드
+                let contentPromises = [];
+                let totalFiles = 0;
+
+                results.forEach(group => {
+                    group.files.forEach(file => {
+                        totalFiles++;
+                        // 실제 텍스트 내용 가져오기 (alt='media')
+                        contentPromises.push(
+                            gapi.client.drive.files.get({ fileId: file.id, alt: 'media' })
+                                .then(res => ({
+                                    name: file.name,
+                                    subject: group.subject,
+                                    content: res.body // 텍스트 내용
+                                }))
+                        );
+                    });
+                });
+
+                if (totalFiles === 0) {
+                    statusMsg.textContent = "폴더 안에 마크다운 파일이 없습니다.";
+                    return;
+                }
+
+                statusMsg.textContent = `${totalFiles}개의 파일 내용 다운로드 중...`;
+                const fileContents = await Promise.all(contentPromises);
+
+                // 4. 파싱 및 저장 (기존 로직 연결)
+                processDriveData(fileContents);
+
+            } catch (err) {
+                console.error(err);
+                statusMsg.textContent = "오류 발생: " + err.message;
+            }
+        }
+
+        // ==========================================
+        // 2. Data Processing & Parsing (Adapted)
+        // ==========================================
+        
+        function processDriveData(filesData) {
+            loadedFiles = [];
+            const regex = /^(\d{2})_(\d{2})_(\d{2})_([^_]+)_(\d{3})(?:_(p|s))?\.md$/;
+
+            for (const file of filesData) {
+                const match = file.name.match(regex);
+                if (match) {
+                    loadedFiles.push({
+                        id: file.name,
+                        fileName: file.name,
+                        subject: file.subject, // 구글 드라이브 폴더명
+                        cat1: match[1],
+                        cat2: match[2],
+                        cat3: match[3],
+                        type: match[4],
+                        serial: match[5],
+                        kind: match[6] || "",
+                        keyCat1: match[1],
+                        keyCat2: `${match[1]}_${match[2]}`,
+                        keyCat3: `${match[1]}_${match[2]}_${match[3]}`,
+                        content: file.content
+                    });
+                }
+            }
+
+            document.getElementById('statusMsg').textContent = `총 ${loadedFiles.length}개의 문서를 드라이브에서 로드했습니다.`;
+            updateFilters();
+            applyFilters();
+        }
+
+        // --- Helper: Markdown Parsing (기존 로직 유지) ---
+        function parseMarkdownWithMath(content) {
+            if (!content) return "";
+            const mathRegex = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|(?<!\\)\$(?!$)[^\n$]*?(?<!\\)\$|\\\([\s\S]*?\\\))/g;
+            const mathTokens = [];
+            const mathId = "MATH_TOKEN_" + Math.random().toString(36).substr(2, 9) + "_";
+            let contentProtected = content.replace(mathRegex, (match) => {
+                mathTokens.push(match);
+                return mathId + (mathTokens.length - 1);
+            });
+            const htmlTagRegex = /<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g;
+            const htmlTokens = [];
+            const htmlId = "HTML_TOKEN_" + Math.random().toString(36).substr(2, 9) + "_";
+            contentProtected = contentProtected.replace(htmlTagRegex, (match) => {
+                htmlTokens.push(match);
+                return htmlId + (htmlTokens.length - 1);
+            });
+            let processedText = contentProtected.replace(/\\\\/g, '<br>').replace(/</g, '&lt;').replace(/(?<!^|\n)>/g, '&gt;');
+            htmlTokens.forEach((token, index) => processedText = processedText.replace(htmlId + index, token));
+            let html = marked.parse(processedText);
+            mathTokens.forEach((token, index) => {
+                const safeToken = token.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                html = html.replace(mathId + index, safeToken);
+            });
+            return html;
+        }
+
+        // ==========================================
+        // 3. Filter & UI Logic (기존 로직 유지)
+        // ==========================================
+        const filterSubject = document.getElementById('filterSubject');
+        const filterCat1 = document.getElementById('filterCat1');
+        const filterCat2 = document.getElementById('filterCat2');
+        const filterCat3 = document.getElementById('filterCat3');
+
+        function populateSelect(selectEl, values, mapFn, defaultText) {
+            selectEl.innerHTML = `<option value="">${defaultText}</option>`;
+            values.forEach(val => {
+                const option = document.createElement('option');
+                option.value = val;
+                option.textContent = mapFn ? (mapFn(val) || val) : val;
+                selectEl.appendChild(option);
+            });
+        }
+        function getMapName(code) { return CATEGORY_MAP[code] ? `${code}. ${CATEGORY_MAP[code]}` : code; }
+
+        function updateFilters() {
+            const subjects = [...new Set(loadedFiles.map(f => f.subject))].sort();
+            populateSelect(filterSubject, subjects, null, "과목 (전체)");
+            const cat1s = [...new Set(loadedFiles.map(f => f.keyCat1))].sort();
+            populateSelect(filterCat1, cat1s, getMapName, "대단원 (전체)");
+            filterCat2.innerHTML = '<option value="">중단원 (전체)</option>';
+            filterCat3.innerHTML = '<option value="">소단원 (전체)</option>';
+        }
+
+        filterSubject.addEventListener('change', () => applyFilters());
+        filterCat1.addEventListener('change', () => {
+            const selectedVal = filterCat1.value;
+            const relevantFiles = loadedFiles.filter(f => !selectedVal || f.keyCat1 === selectedVal);
+            const cat2s = [...new Set(relevantFiles.map(f => f.keyCat2))].sort();
+            populateSelect(filterCat2, cat2s, getMapName, "중단원 (전체)");
+            filterCat3.innerHTML = '<option value="">소단원 (전체)</option>';
+            applyFilters();
+        });
+        filterCat2.addEventListener('change', () => {
+            const selectedVal = filterCat2.value;
+            const relevantFiles = loadedFiles.filter(f => !selectedVal || f.keyCat2 === selectedVal);
+            const cat3s = [...new Set(relevantFiles.map(f => f.keyCat3))].sort();
+            populateSelect(filterCat3, cat3s, getMapName, "소단원 (전체)");
+            applyFilters();
+        });
+        filterCat3.addEventListener('change', applyFilters);
+
+        function transformCustomEnumerate(root) {
+            const uls = root.querySelectorAll('ul');
+            uls.forEach(ul => {
+                const lis = Array.from(ul.querySelectorAll(':scope > li'));
+                if (lis.length === 0) return;
+                let allMatch = true;
+                lis.forEach(li => {
+                    const html = li.innerHTML.trim();
+                    const m = html.match(/^\[\s*(\([^)]+?\)|[^\]]+?)\s*\]\s*/);
+                    if (m) {
+                        li.setAttribute('data-label', m[1]);
+                        li.innerHTML = html.replace(m[0], '');
+                    } else allMatch = false;
+                });
+                if (allMatch) ul.classList.add('k-ol');
+            });
+        }
+
+        function applyFilters() {
+            const sSubject = filterSubject.value;
+            const sCat1 = filterCat1.value;
+            const sCat2 = filterCat2.value;
+            const sCat3 = filterCat3.value;
+            let targetFiles = loadedFiles.filter(f => {
+                if (sSubject && f.subject !== sSubject) return false;
+                if (sCat1 && f.keyCat1 !== sCat1) return false;
+                if (sCat2 && f.keyCat2 !== sCat2) return false;
+                if (sCat3 && f.keyCat3 !== sCat3) return false;
+                return true;
+            });
+            targetFiles.sort((a, b) => {
+                if (a.serial !== b.serial) return a.serial.localeCompare(b.serial);
+                const kindOrder = { "": 0, "p": 1, "s": 2 };
+                return kindOrder[a.kind] - kindOrder[b.kind];
+            });
+            renderContent(targetFiles);
+        }
+
+        function renderContent(files) {
+            const container = document.getElementById('contentArea');
+            container.innerHTML = "";
+            if (files.length === 0) {
+                container.innerHTML = `<div class="text-center text-gray-500 py-10">조건에 맞는 문서가 없습니다.</div>`;
+                return;
+            }
+            const solutionMap = {};
+            files.filter(f => f.kind === 's').forEach(f => {
+                const key = `${f.keyCat3}_${f.type}_${f.serial}`;
+                solutionMap[key] = f;
+            });
+            files.filter(f => f.kind !== 's').forEach(file => {
+                const isProblem = file.kind === 'p';
+                const wrapper = document.createElement('div');
+                wrapper.className = "bg-white p-6 rounded-lg shadow-sm border border-gray-200 transition hover:shadow-md relative";
+                const metaTag = `<span class="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded mb-2">${getMapName(file.keyCat3)} | No.${file.serial} ${isProblem ? '(문제)' : '(개념)'}</span>`;
+                const renderedHTML = parseMarkdownWithMath(file.content);
+                
+                if (isProblem) {
+                    const key = `${file.keyCat3}_${file.type}_${file.serial}`;
+                    const solutionFile = solutionMap[key];
+                    if (solutionFile) {
+                        const btn = document.createElement('button');
+                        btn.className = "absolute bottom-4 right-4 bg-indigo-600 text-white text-xs px-3 py-1.5 rounded hover:bg-indigo-700 transition flex items-center";
+                        btn.innerHTML = '<i class="fas fa-search mr-1"></i> 해설 보기';
+                        btn.onclick = () => openModal(solutionFile.content);
+                        wrapper.innerHTML = metaTag + `<div class="markdown-body">${renderedHTML}</div>`;
+                        transformCustomEnumerate(wrapper.querySelector('.markdown-body'));
+                        wrapper.appendChild(btn);
+                        container.appendChild(wrapper);
+                        return;
+                    }
+                }
+                wrapper.innerHTML = metaTag + `<div class="markdown-body">${renderedHTML}</div>`;
+                transformCustomEnumerate(wrapper.querySelector('.markdown-body'));
+                container.appendChild(wrapper);
+            });
+            if (window.MathJax) window.MathJax.typesetPromise([container]).catch(err => console.log('MathJax Error:', err));
+        }
+
+        // Modal Logic
+        const modal = document.getElementById('solutionModal');
+        const modalContent = document.getElementById('modalContent');
+        function openModal(content) {
+            modalContent.innerHTML = parseMarkdownWithMath(content);
+            transformCustomEnumerate(modalContent);
+            modal.classList.remove('hidden');
+            if (window.MathJax) window.MathJax.typesetPromise([modalContent]);
+        }
+        function closeModal() { modal.classList.add('hidden'); }
+        document.addEventListener('keydown', (e) => {
+            if (e.key === "Escape" && !modal.classList.contains('hidden')) closeModal();
+        });
+    </script>
+</body>
+</html>
