@@ -6,38 +6,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Google Drive PDF E-Book Viewer</title>
     <script src="https://cdn.tailwindcss.com"></script>
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700&family=Nanum+Myeongjo:wght@400;700&display=swap');
         
         body { font-family: 'Nanum Myeongjo', serif; }
-        header, button, select, input, .ui-font { font-family: 'Nanum Gothic', sans-serif; }
+        header, button, select, input, .ui-font, .toc-font { font-family: 'Nanum Gothic', sans-serif; }
         
-        /* 커스텀 스크롤바 */
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f1f1; }
-        ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #555; }
+        /* 스크롤바 커스텀 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        /* Iframe 로딩 애니메이션 */
-        .iframe-loader {
-            background: #f3f4f6 url('https://i.gifer.com/ZZ5H.gif') no-repeat center center;
-            background-size: 50px;
+        /* 목차(TOC) 애니메이션 */
+        #tocSidebar {
+            transition: transform 0.3s ease-in-out;
+            transform: translateX(100%); /* 기본적으로 오른쪽으로 숨김 */
+        }
+        #tocSidebar.open {
+            transform: translateX(0); /* 열리면 보임 */
         }
     </style>
 </head>
 
-<body class="bg-gray-100 min-h-screen flex flex-col">
+<body class="bg-gray-50 min-h-screen flex flex-col relative overflow-x-hidden">
 
-    <header class="sticky top-0 z-40 bg-white shadow-md border-b border-gray-200">
+    <header class="sticky top-0 z-40 bg-white/95 backdrop-blur-sm shadow-sm border-b border-gray-200">
         <div class="container mx-auto px-4 py-3">
             <div class="flex flex-col md:flex-row justify-between items-center mb-3 gap-3">
-                <h1 class="text-xl font-bold text-gray-800 flex items-center">
+                <h1 class="text-xl font-bold text-gray-800 flex items-center ui-font">
                     <i class="fab fa-google-drive mr-2 text-green-600"></i> Drive PDF E-Book
                 </h1>
                 
-                <div class="flex gap-2">
+                <div class="flex gap-2 ui-font">
                     <button id="authBtn" onclick="handleAuthClick()" class="hidden px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-medium transition shadow-sm">
                         <i class="fab fa-google mr-2"></i> 구글 로그인
                     </button>
@@ -50,41 +54,57 @@
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 ui-font">
                 <select id="filterSubject" class="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"><option value="">과목 (전체)</option></select>
                 <select id="filterCat1" class="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"><option value="">대단원 (전체)</option></select>
                 <select id="filterCat2" class="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"><option value="">중단원 (전체)</option></select>
                 <select id="filterCat3" class="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"><option value="">소단원 (전체)</option></select>
             </div>
 
-            <div id="statusMsg" class="text-xs text-gray-500 mt-2 text-right">구글 드라이브에 로그인해주세요.</div>
+            <div id="statusMsg" class="text-xs text-gray-500 mt-2 text-right ui-font">구글 드라이브에 로그인해주세요.</div>
         </div>
     </header>
 
-    <main class="flex-grow container mx-auto px-4 py-6 max-w-5xl overflow-y-auto">
-        <div id="contentArea" class="space-y-8">
-            <div class="text-center text-gray-400 py-20">
+    <main class="flex-grow container mx-auto px-0 md:px-4 py-6 max-w-5xl">
+        <div id="contentArea" class="space-y-12"> <div class="text-center text-gray-400 py-20 ui-font">
                 <i class="fas fa-file-pdf text-4xl mb-4"></i>
                 <p>표시할 문서가 없습니다.<br>로그인 후 'PDF 불러오기'를 클릭하세요.</p>
             </div>
         </div>
     </main>
 
+    <button id="tocToggleBtn" onclick="toggleTOC()" class="hidden fixed top-40 right-4 z-30 bg-white text-gray-700 p-3 rounded-full shadow-lg border border-gray-200 hover:bg-gray-50 hover:text-blue-600 transition-all transform hover:scale-105" title="목차 보기">
+        <i class="fas fa-bars text-xl"></i>
+    </button>
+
+    <div id="tocSidebar" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-50 border-l border-gray-200 flex flex-col ui-font">
+        <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+            <h2 class="font-bold text-gray-800"><i class="fas fa-list-ul mr-2 text-blue-600"></i>목차</h2>
+            <button onclick="toggleTOC()" class="text-gray-400 hover:text-red-500 transition focus:outline-none">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        <div id="tocContent" class="flex-grow overflow-y-auto p-4 space-y-4 text-sm">
+            <p class="text-gray-400 text-center py-4">파일을 먼저 불러와주세요.</p>
+        </div>
+    </div>
+    
+    <div id="tocOverlay" onclick="toggleTOC()" class="fixed inset-0 bg-black/20 z-40 hidden transition-opacity"></div>
+
+
     <div id="solutionModal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true">
-        <div class="fixed inset-0 bg-gray-900 bg-opacity-80 transition-opacity backdrop-blur-sm" onclick="closeModal()"></div>
+        <div class="fixed inset-0 bg-gray-900 bg-opacity-90 transition-opacity backdrop-blur-sm" onclick="closeModal()"></div>
         <div class="fixed inset-0 z-10 overflow-y-auto">
-            <div class="flex min-h-full items-center justify-center p-2 text-center">
-                <div class="relative transform overflow-hidden rounded-xl bg-white text-left shadow-2xl transition-all w-full max-w-5xl h-[85vh] flex flex-col">
-                    
-                    <div class="bg-gray-50 px-4 py-3 flex justify-between items-center border-b border-gray-200 shrink-0">
+            <div class="flex min-h-full items-center justify-center p-0 md:p-4 text-center">
+                <div class="relative transform overflow-hidden rounded-none md:rounded-xl bg-white text-left shadow-2xl transition-all w-full md:max-w-6xl h-full md:h-[90vh] flex flex-col">
+                    <div class="bg-gray-50 px-4 py-3 flex justify-between items-center border-b border-gray-200 shrink-0 ui-font">
                         <h3 class="text-lg font-bold text-gray-800 flex items-center">
-                            <i class="fas fa-lightbulb mr-2 text-yellow-500"></i> 해설 보기
+                            <i class="fas fa-lightbulb mr-2 text-yellow-500"></i> 해설
                         </h3>
                         <button type="button" onclick="closeModal()" class="text-gray-400 hover:text-red-500 focus:outline-none transition">
                             <i class="fas fa-times text-xl"></i>
                         </button>
                     </div>
-                    
                     <div class="flex-grow bg-gray-200 relative">
                         <iframe id="modalIframe" src="" class="w-full h-full border-none absolute inset-0"></iframe>
                     </div>
@@ -95,7 +115,7 @@
 
     <script>
         // ==========================================
-        // [설정] 구글 API 및 폴더 설정
+        // [설정] YOUR_API_KEY 입력 필수
         // ==========================================
         const CONFIG = {
             CLIENT_ID: '129767670296-eipi50ba5g8r1fp1rr45f6e1l4vl9bhk.apps.googleusercontent.com',       // [입력] 클라이언트 ID
@@ -111,16 +131,15 @@
         let gisInited = false;
         let loadedFiles = [];
         
-        // 분류명 매핑 (필요에 따라 수정)
         let CATEGORY_MAP = {
             "01": "수학 I", "02": "수학 II",
             "01_01": "지수함수와 로그함수", "01_02": "삼각함수", "02_01": "함수의 극한",
             "01_01_01": "지수", "01_01_02": "로그", "01_02_01": "삼각함수의 뜻", "02_01_01": "함수의 극한값"
         };
 
-        // ==========================================
-        // 1. Google Auth & API Logic
-        // ==========================================
+        function getMapName(code) { return CATEGORY_MAP[code] ? `${code}. ${CATEGORY_MAP[code]}` : code; }
+
+        // --- Google API Logic ---
         function gapiLoaded() { gapi.load('client', initializeGapiClient); }
         async function initializeGapiClient() {
             await gapi.client.init({ apiKey: CONFIG.API_KEY, discoveryDocs: [CONFIG.DISCOVERY_DOC] });
@@ -135,7 +154,6 @@
         function maybeEnableButtons() {
             if (gapiInited && gisInited) document.getElementById('authBtn').classList.remove('hidden');
         }
-
         function handleAuthClick() {
             tokenClient.callback = async (resp) => {
                 if (resp.error) throw (resp);
@@ -147,7 +165,6 @@
             if (gapi.client.getToken() === null) tokenClient.requestAccessToken({prompt: 'consent'});
             else tokenClient.requestAccessToken({prompt: ''});
         }
-
         function handleSignoutClick() {
             const token = gapi.client.getToken();
             if (token !== null) {
@@ -158,18 +175,18 @@
                 document.getElementById('loadBtn').classList.add('hidden');
                 document.getElementById('contentArea').innerHTML = "";
                 document.getElementById('statusMsg').innerText = "로그아웃 되었습니다.";
+                document.getElementById('tocToggleBtn').classList.add('hidden'); // 목차 버튼 숨김
                 loadedFiles = [];
             }
         }
 
-        // --- Drive Fetching Logic (PDF 전용) ---
+        // --- Drive Fetching Logic ---
         async function fetchFromDrive() {
             const statusMsg = document.getElementById('statusMsg');
             statusMsg.textContent = "구글 드라이브 구조 분석 중...";
             loadedFiles = [];
 
             try {
-                // 1. 루트 폴더 안의 하위 폴더들(과목) 가져오기
                 const folderQuery = `'${CONFIG.ROOT_FOLDER_ID}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
                 const foldersResp = await gapi.client.drive.files.list({ q: folderQuery, fields: 'files(id, name)' });
                 const subjectFolders = foldersResp.result.files;
@@ -179,14 +196,10 @@
                     return;
                 }
 
-                // 2. 각 과목 폴더 안의 PDF 파일 가져오기
                 let fetchPromises = [];
-
                 for (const folder of subjectFolders) {
                     const subjectName = folder.name;
-                    // [변경] mimeType = 'application/pdf'
                     const fileQuery = `'${folder.id}' in parents and mimeType = 'application/pdf' and trashed = false`;
-                    
                     fetchPromises.push(
                         gapi.client.drive.files.list({ q: fileQuery, fields: 'files(id, name)' })
                             .then(res => ({ subject: subjectName, files: res.result.files }))
@@ -196,15 +209,10 @@
                 statusMsg.textContent = "파일 목록 수집 중...";
                 const results = await Promise.all(fetchPromises);
 
-                // 3. 파일 목록 통합 (내용 다운로드 불필요, ID만 있으면 됨)
                 let allFiles = [];
                 results.forEach(group => {
                     group.files.forEach(file => {
-                        allFiles.push({
-                            id: file.id,
-                            name: file.name,
-                            subject: group.subject
-                        });
+                        allFiles.push({ id: file.id, name: file.name, subject: group.subject });
                     });
                 });
 
@@ -212,8 +220,6 @@
                     statusMsg.textContent = "폴더 안에 PDF 파일이 없습니다.";
                     return;
                 }
-
-                // 4. 데이터 가공
                 processDriveData(allFiles);
 
             } catch (err) {
@@ -222,21 +228,14 @@
             }
         }
 
-        // ==========================================
-        // 2. Data Processing (PDF Version)
-        // ==========================================
-        
         function processDriveData(files) {
             loadedFiles = [];
-            // [변경] 확장자가 .pdf 인지 확인하는 정규식
             const regex = /^(\d{2})_(\d{2})_(\d{2})_([^_]+)_(\d{3})(?:_(p|s))?\.pdf$/i;
 
             for (const file of files) {
                 const match = file.name.match(regex);
                 if (match) {
-                    // [핵심] 구글 드라이브 미리보기 URL 생성
                     const previewUrl = `https://drive.google.com/file/d/${file.id}/preview`;
-
                     loadedFiles.push({
                         id: file.id,
                         fileName: file.name,
@@ -246,24 +245,25 @@
                         cat3: match[3],
                         type: match[4],
                         serial: match[5],
-                        kind: match[6] || "", // undefined면 공란(개념)
+                        kind: match[6] || "",
+                        keyCat3: `${match[1]}_${match[2]}_${match[3]}`,
+                        // 전체 키 (필터링용)
                         keyCat1: match[1],
                         keyCat2: `${match[1]}_${match[2]}`,
-                        keyCat3: `${match[1]}_${match[2]}_${match[3]}`,
-                        previewUrl: previewUrl // iframe src로 사용
+                        previewUrl: previewUrl
                     });
                 }
             }
 
             document.getElementById('statusMsg').textContent = `총 ${loadedFiles.length}개의 PDF 문서를 로드했습니다.`;
+            // 목차 버튼 보이기
+            document.getElementById('tocToggleBtn').classList.remove('hidden');
+            
             updateFilters();
             applyFilters();
         }
 
-
-        // ==========================================
-        // 3. Filter & UI Logic
-        // ==========================================
+        // --- Filter & UI Logic ---
         const filterSubject = document.getElementById('filterSubject');
         const filterCat1 = document.getElementById('filterCat1');
         const filterCat2 = document.getElementById('filterCat2');
@@ -278,7 +278,6 @@
                 selectEl.appendChild(option);
             });
         }
-        function getMapName(code) { return CATEGORY_MAP[code] ? `${code}. ${CATEGORY_MAP[code]}` : code; }
 
         function updateFilters() {
             const subjects = [...new Set(loadedFiles.map(f => f.subject))].sort();
@@ -288,7 +287,8 @@
             filterCat2.innerHTML = '<option value="">중단원 (전체)</option>';
             filterCat3.innerHTML = '<option value="">소단원 (전체)</option>';
         }
-
+        
+        // 필터 이벤트 리스너 (기존 로직 유지)
         filterSubject.addEventListener('change', () => applyFilters());
         filterCat1.addEventListener('change', () => {
             const selectedVal = filterCat1.value;
@@ -306,9 +306,6 @@
             applyFilters();
         });
         filterCat3.addEventListener('change', applyFilters);
-
-
-        // --- 4. Rendering Logic (PDF Iframe) ---
 
         function applyFilters() {
             const sSubject = filterSubject.value;
@@ -330,41 +327,44 @@
                 return kindOrder[a.kind] - kindOrder[b.kind];
             });
 
+            // 필터링된 결과로 메인 컨텐츠 렌더링
             renderContent(targetFiles);
+            // 필터링된 결과로 목차(TOC) 업데이트
+            renderTOC(targetFiles);
         }
 
+        // --- 4. Content Rendering (Borderless Style) ---
         function renderContent(files) {
             const container = document.getElementById('contentArea');
             container.innerHTML = "";
             
             if (files.length === 0) {
-                container.innerHTML = `<div class="text-center text-gray-500 py-10">조건에 맞는 문서가 없습니다.</div>`;
+                container.innerHTML = `<div class="text-center text-gray-500 py-10 ui-font">조건에 맞는 문서가 없습니다.</div>`;
                 return;
             }
 
-            // 해설 맵 생성
             const solutionMap = {};
             files.filter(f => f.kind === 's').forEach(f => {
                 const key = `${f.keyCat3}_${f.type}_${f.serial}`;
                 solutionMap[key] = f;
             });
 
-            // 문제(p)와 개념("")만 렌더링
             files.filter(f => f.kind !== 's').forEach(file => {
                 const isProblem = file.kind === 'p';
                 
+                // [수정] 테두리(border), 그림자(shadow), 여백(padding) 제거하여 깔끔하게
                 const wrapper = document.createElement('div');
-                wrapper.className = "bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden mb-6 relative hover:shadow-lg transition";
+                wrapper.id = `doc-${file.id}`; // 목차 이동을 위한 ID 부여
+                wrapper.className = "bg-white mb-12 scroll-mt-32"; // scroll-mt는 헤더에 가려지지 않게 여백 줌
 
-                // 메타 정보
-                const header = `<div class="bg-gray-50 px-4 py-2 border-b border-gray-100 flex justify-between items-center">
-                    <span class="text-xs font-bold text-gray-500">${getMapName(file.keyCat3)}</span>
-                    <span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">No.${file.serial} ${isProblem ? '문제' : '개념'}</span>
+                // 헤더 (최소한의 구분선만 남김)
+                const header = `<div class="px-2 py-3 border-b border-gray-100 flex justify-between items-center ui-font">
+                    <span class="text-sm font-bold text-gray-600">${getMapName(file.keyCat3)}</span>
+                    <span class="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold">No.${file.serial} ${isProblem ? '문제' : '개념'}</span>
                 </div>`;
 
-                // [변경] PDF Iframe 뷰어
-                // iframe-loader 클래스로 로딩 인디케이터 표시
-                const viewer = `<div class="w-full h-[600px] bg-gray-100 iframe-loader relative">
+                // 뷰어 (꽉 차게)
+                const viewer = `<div class="w-full aspect-[3/4] md:aspect-[4/3] bg-gray-50 relative">
                     <iframe src="${file.previewUrl}" class="w-full h-full border-none" allow="autoplay"></iframe>
                 </div>`;
 
@@ -373,10 +373,9 @@
                     const key = `${file.keyCat3}_${file.type}_${file.serial}`;
                     const solutionFile = solutionMap[key];
                     if (solutionFile) {
-                        // 해설 버튼을 뷰어 하단에 배치
-                        btnHtml = `<div class="p-3 bg-white border-t border-gray-100 flex justify-end">
-                            <button onclick="openModal('${solutionFile.previewUrl}')" class="bg-indigo-600 text-white text-sm px-4 py-2 rounded hover:bg-indigo-700 transition flex items-center shadow-sm">
-                                <i class="fas fa-search mr-2"></i> 해설 보기
+                        btnHtml = `<div class="p-2 bg-white flex justify-end ui-font">
+                            <button onclick="openModal('${solutionFile.previewUrl}')" class="text-indigo-600 hover:text-indigo-800 text-sm font-bold px-3 py-1 transition flex items-center">
+                                <i class="fas fa-search mr-1"></i> 해설 보기
                             </button>
                         </div>`;
                     }
@@ -387,20 +386,82 @@
             });
         }
 
-        // --- 5. Modal Logic (Iframe for Solution) ---
+        // --- 5. TOC (Table of Contents) Logic ---
+        function renderTOC(files) {
+            const tocContent = document.getElementById('tocContent');
+            tocContent.innerHTML = "";
+
+            if (files.length === 0) {
+                tocContent.innerHTML = `<p class="text-gray-400 text-center">표시할 내용이 없습니다.</p>`;
+                return;
+            }
+
+            // 문제/개념 파일만 목차에 표시 (해설 제외)
+            const targetFiles = files.filter(f => f.kind !== 's');
+            
+            // 그룹화: 소단원(Cat3) 기준
+            const grouped = {};
+            targetFiles.forEach(f => {
+                const groupName = getMapName(f.keyCat3);
+                if (!grouped[groupName]) grouped[groupName] = [];
+                grouped[groupName].push(f);
+            });
+
+            // 목차 생성
+            Object.keys(grouped).forEach(groupName => {
+                // 그룹 제목 (소단원)
+                const groupHeader = document.createElement('div');
+                groupHeader.className = "font-bold text-gray-800 mt-4 mb-2 text-xs uppercase tracking-wider";
+                groupHeader.textContent = groupName;
+                tocContent.appendChild(groupHeader);
+
+                // 파일 목록
+                const ul = document.createElement('ul');
+                ul.className = "space-y-1 border-l-2 border-gray-100 pl-3";
+                
+                grouped[groupName].forEach(f => {
+                    const li = document.createElement('li');
+                    const link = document.createElement('a');
+                    // 클릭 시 해당 위치로 스크롤 이동 및 목차 닫기
+                    link.href = `#doc-${f.id}`;
+                    link.className = "block text-gray-600 hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition truncate";
+                    link.textContent = `No.${f.serial} ${f.type} (${f.kind === 'p' ? '문제' : '개념'})`;
+                    link.onclick = (e) => {
+                        // 부드러운 스크롤은 CSS scroll-behavior로 처리되거나 기본 동작
+                        if (window.innerWidth < 1024) toggleTOC(); // 모바일에서는 클릭 후 닫기
+                    };
+                    
+                    li.appendChild(link);
+                    ul.appendChild(li);
+                });
+                tocContent.appendChild(ul);
+            });
+        }
+
+        function toggleTOC() {
+            const sidebar = document.getElementById('tocSidebar');
+            const overlay = document.getElementById('tocOverlay');
+            
+            if (sidebar.classList.contains('open')) {
+                sidebar.classList.remove('open');
+                overlay.classList.add('hidden');
+            } else {
+                sidebar.classList.add('open');
+                overlay.classList.remove('hidden');
+            }
+        }
+
+        // --- 6. Modal Logic ---
         const modal = document.getElementById('solutionModal');
         const modalIframe = document.getElementById('modalIframe');
-
         function openModal(url) {
             modalIframe.src = url;
             modal.classList.remove('hidden');
         }
-
         function closeModal() {
             modal.classList.add('hidden');
-            modalIframe.src = ""; // iframe 초기화 (소리/영상 멈춤 및 메모리 해제)
+            modalIframe.src = "";
         }
-
         document.addEventListener('keydown', (e) => {
             if (e.key === "Escape" && !modal.classList.contains('hidden')) closeModal();
         });
@@ -408,6 +469,5 @@
     </script>
     <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
     <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
-
 </body>
 </html>
